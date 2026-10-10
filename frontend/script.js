@@ -3,7 +3,7 @@
 // Replace API_BASE_URL with your Azure Function URL once deployed.
 // Example: "https://my-resume-api.azurewebsites.net/api"
 // ============================================================
-const API_BASE_URL = "http://localhost:7071/api"; // local dev default
+const API_BASE_URL = "https://cloud-resume-func-alex26649.azurewebsites.net/api";
 const VISITOR_ENDPOINT = `${API_BASE_URL}/visitor`;
 
 // ============================================================
