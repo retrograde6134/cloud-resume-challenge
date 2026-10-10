@@ -68,4 +68,4 @@ def visitor(req: func.HttpRequest) -> func.HttpResponse:
 @app.route(route="visitor", methods=["OPTIONS"])
 def visitor_preflight(req: func.HttpRequest) -> func.HttpResponse:
     """Handle CORS preflight requests from the browser."""
-    return func.HttpResponse(status_code=204, headers=CORS_HEADERS)
+    return func.HttpResponse(status_code=204, headers=CORS_HEADERS)# CI trigger
