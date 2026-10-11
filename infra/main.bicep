@@ -1,8 +1,3 @@
-// ============================================================
-// Cloud Resume Challenge - Backend Infrastructure
-// Cosmos DB (Table API, serverless) + Storage + Function App
-// ============================================================
-
 @description('Azure region for regional resources (Storage, Function App)')
 param location string = 'westus2'
 
@@ -24,12 +19,9 @@ param appServicePlanName string
 @description('Cosmos DB Table name for the visitor counter')
 param tableName string = 'visitors'
 
-// ------------------------------------------------------------
-// Cosmos DB Account — Table API, Serverless
-// ------------------------------------------------------------
 resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {
   name: cosmosAccountName
-  location: cosmosMetadataLocation   // FIX: was `location`
+  location: cosmosMetadataLocation
   kind: 'GlobalDocumentDB'
   properties: {
     databaseAccountOfferType: 'Standard'
@@ -42,7 +34,7 @@ resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {
     }
     locations: [
       {
-        locationName: location   // stays westus2 — data plane location
+        locationName: location
         failoverPriority: 0
         isZoneRedundant: false
       }
@@ -56,9 +48,6 @@ resource cosmosAccount 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {
   }
 }
 
-// ------------------------------------------------------------
-// Cosmos DB Table
-// ------------------------------------------------------------
 resource visitorsTable 'Microsoft.DocumentDB/databaseAccounts/tables@2024-11-15' = {
   parent: cosmosAccount
   name: tableName
@@ -69,9 +58,6 @@ resource visitorsTable 'Microsoft.DocumentDB/databaseAccounts/tables@2024-11-15'
   }
 }
 
-// ------------------------------------------------------------
-// Storage Account — Function App runtime state
-// ------------------------------------------------------------
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: storageAccountName
   location: location
@@ -89,18 +75,10 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   }
 }
 
-// ------------------------------------------------------------
-// App Service Plan — reference existing (no new plan)
-// FIX: using the auto-generated existing plan name avoids
-// a plan migration for the Function App.
-// ------------------------------------------------------------
 resource plan 'Microsoft.Web/serverfarms@2024-04-01' existing = {
   name: appServicePlanName
 }
 
-// ------------------------------------------------------------
-// Function App
-// ------------------------------------------------------------
 var cosmosKey = cosmosAccount.listKeys().primaryMasterKey
 var cosmosTableConnectionString = 'DefaultEndpointsProtocol=https;AccountName=${cosmosAccountName};AccountKey=${cosmosKey};TableEndpoint=https://${cosmosAccountName}.table.cosmos.azure.com:443/;'
 var storageConnectionString = 'DefaultEndpointsProtocol=https;AccountName=${storageAccountName};AccountKey=${storageAccount.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}'
@@ -134,9 +112,6 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
   }
 }
 
-// ------------------------------------------------------------
-// Outputs
-// ------------------------------------------------------------
 output cosmosAccountName string = cosmosAccount.name
 output cosmosAccountEndpoint string = cosmosAccount.properties.documentEndpoint
 output storageAccountName string = storageAccount.name
