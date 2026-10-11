@@ -1,130 +1,82 @@
-# Cloud Resume Challenge — Azure
+# Cloud Resume Challenge (Azure)
 
-My take on the [Cloud Resume Challenge](https://cloudresumechallenge.dev/), Azure track.
+Resume site with a visitor counter. [alexlittle.dev](https://alexlittle.dev).
 
-**Live:** [alexlittle.dev](https://alexlittle.dev)
-
-## What this is
-
-A static resume site with a visitor counter. The counter is a serverless
-Python function that reads and increments a row in Cosmos DB — it exists so
-the project has something running in Azure beyond static hosting.
+The counter is a Python function on Azure Functions that reads and increments a row in Cosmos DB. The rest is static HTML, CSS, and JS.
 
 ## Architecture
 
-    Browser
-      │
-      ▼
-    Azure Static Web App  (global CDN, managed HTTPS, custom domain)
-      │
-      │  fetch POST /api/visitor
-      ▼
-    Azure Function  (Python 3.12, Consumption plan, HTTP trigger)
-      │
-      ▼
-    Cosmos DB  (Table API, serverless capacity)
+```
+Browser
+  │
+  ▼
+Static Web Apps (CDN + HTTPS + custom domain)
+  │  POST /api/visitor
+  ▼
+Azure Functions (Python 3.12, Consumption, Linux)
+  │
+  ▼
+Cosmos DB (Table API, serverless)
+```
 
-Two GitHub Actions workflows:
+Two workflows in GitHub Actions. One builds the frontend and deploys it to Static Web Apps on push to `main`. The other runs pytest and deploys the function if the tests pass. Backend deploys use OIDC, so no Azure credential is stored anywhere.
 
-- **Frontend** — builds and deploys the Static Web App on push to `main`
-- **Backend** — runs pytest, then deploys the Function App only if tests pass
+Infrastructure is Bicep, under `infra/`.
 
-Backend deploys use OIDC federated credentials. There's no stored Azure
-secret in the repo.
+## Local
 
-## Stack
+Frontend:
 
-| Layer | Service | Notes |
-|---|---|---|
-| Frontend | Azure Static Web Apps | Free tier, auto-deploy from GitHub |
-| API | Azure Functions | Python 3.12, Consumption plan, Linux |
-| Database | Cosmos DB | Table API, serverless — pennies per month |
-| IaC | Bicep | Cosmos, Storage, Function App |
-| CI/CD | GitHub Actions | Separate workflows for frontend and backend |
-
-## Running it locally
-
-### Frontend
-
-```bash
+```
 cd frontend
 python3 -m http.server 8000
 ```
 
-Then open http://localhost:8000. The visitor counter will fail until you point
-`API_BASE_URL` in `script.js` at a running backend (or the deployed one).
+The counter won't work until the backend is reachable. Either run it locally or change `API_BASE_URL` in `script.js` to point at the deployed one.
 
-### Backend
+Backend:
 
-```bash
+```
 cd backend
 python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-
-# Add COSMOS_CONNECTION_STRING to local.settings.json (see backend/.gitignore)
-# You'll also need Azurite for local AzureWebJobsStorage:
-#   npm install -g azurite && azurite --location ~/azurite &
-
 func start
 ```
 
-Tests:
+Needs `COSMOS_CONNECTION_STRING` in `local.settings.json` and Azurite running for `AzureWebJobsStorage`.
 
-```bash
+```
 python -m pytest -v
 ```
 
-### Infrastructure
+Infra:
 
-```bash
+```
 az deployment group what-if \
   --resource-group cloud-resume-rg \
   --template-file infra/main.bicep \
   --parameters infra/main.parameters.json
 ```
 
-Always run `what-if` first. It'll catch anything that would replace a live
-resource rather than update it.
+Run what-if first.
 
-## Things that bit me
+## Notes
 
-A few that aren't obvious from the docs, in case they save you an afternoon:
+Cosmos DB accounts have two locations that mean different things. The top-level `location` is metadata and it's fixed at creation. The `properties.locations` array is where data actually lives. Mine are `canadacentral` and `westus2` respectively, and ARM rejected the first Bicep deploy because I had them confused.
 
-- **Cosmos DB has two locations.** The top-level `location` on the account is
-  metadata and can't be changed after creation. The `properties.locations`
-  array is where the data actually lives. These are usually different, and
-  ARM will reject a deployment if you mix them up.
+Function App CORS is configured at the host, not in your function code. The Functions runtime intercepts OPTIONS before your handler runs. If the app's CORS list is empty you get a 404 with no headers, which the browser reports as a CORS failure. `az functionapp cors add` is the fix.
 
-- **Function App CORS is host-level.** Setting `Access-Control-Allow-Origin`
-  in your function code isn't enough for preflight requests. The Functions
-  host intercepts `OPTIONS` before your handler runs, and if the app's CORS
-  settings are empty, it returns 404 with no headers. Configure via
-  `az functionapp cors add`.
+GitHub's OIDC subject claim for a job with an `environment:` is `repo:owner/repo:environment:name`, not the branch ref. They also started embedding immutable owner and repo IDs into the subject string. If the federated credential doesn't match exactly what Azure reports in the error, login fails.
 
-- **GitHub OIDC subject claims changed.** If your workflow uses an
-  `environment:`, the subject is
-  `repo:owner/repo:environment:name`, not `:ref:refs/heads/main`. GitHub also
-  now embeds immutable owner/repo IDs in the subject. Match the exact string
-  Azure reports in the error, or the federated credential won't validate.
+`serverFarmId` comes back empty for Linux Consumption apps. The plan exists, the API just doesn't expose it. Referencing it with `existing` in Bicep still works.
 
-- **Linux Consumption plans don't expose `serverFarmId`.** Referencing a plan
-  with `existing` in Bicep works, but the property comes back empty when you
-  query the app. Not a misconfiguration — the dynamic plan is abstracted.
+`az functionapp cors add` overwrites the list if you pass `--allowed-origins` more than once. Pass every origin in one flag, space separated.
 
-- **`az functionapp cors add` replaces the list.** Passing `--allowed-origins`
-  twice in one command only keeps the last value. Pass both in one flag,
-  space-separated.
+## Scope
 
-## Notes on scope
-
-The Bicep template covers the backend infrastructure. The Static Web App is
-intentionally not in it — managing it via Bicep requires passing a GitHub PAT
-as a secure parameter, which creates a bootstrapping problem when the CI/CD
-that would hold that secret depends on the SWA existing in the first place.
-For a single-environment portfolio project, the trade-off isn't worth it.
+Bicep covers Cosmos, Storage, and the Function App. The Static Web App isn't included. Adding it means passing a GitHub PAT as a secure deployment parameter, and that's circular: the CI/CD that would hold the secret depends on the SWA already existing. Not worth solving for one environment.
 
 ## Contact
 
-- [LinkedIn](https://www.linkedin.com/in/aclittle)
-- [GitHub](https://github.com/retrograde6134)
+[LinkedIn](https://www.linkedin.com/in/aclittle) · [GitHub](https://github.com/retrograde6134)
